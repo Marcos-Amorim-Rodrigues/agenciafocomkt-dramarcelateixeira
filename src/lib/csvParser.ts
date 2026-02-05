@@ -76,9 +76,17 @@ export function parseCSV(csvText: string): CampaignData[] {
 }
 
 export function filterByDateRange(data: CampaignData[], startDate: Date, endDate: Date): CampaignData[] {
+  // Normalize dates to start/end of day for accurate comparison
+  const start = new Date(startDate);
+  start.setHours(0, 0, 0, 0);
+  
+  const end = new Date(endDate);
+  end.setHours(23, 59, 59, 999);
+  
   return data.filter(item => {
     const itemDate = new Date(item.date);
-    return itemDate >= startDate && itemDate <= endDate;
+    itemDate.setHours(12, 0, 0, 0); // Set to noon to avoid timezone issues
+    return itemDate >= start && itemDate <= end;
   });
 }
 
