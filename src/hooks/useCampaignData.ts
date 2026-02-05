@@ -31,12 +31,7 @@ export function useCampaignData() {
   const [rawData, setRawData] = useState<CampaignData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [dateRange, setDateRange] = useState<DateRange>(() => {
-    const to = new Date();
-    const from = new Date();
-    from.setDate(to.getDate() - 30);
-    return { from, to };
-  });
+  const [dateRange, setDateRange] = useState<DateRange | null>(null);
 
   useEffect(() => {
     async function fetchData() {
@@ -47,6 +42,27 @@ export function useCampaignData() {
         const text = await response.text();
         const parsed = parseCSV(text);
         setRawData(parsed);
+        
+        // Set initial date range based on data
+        if (parsed.length > 0) {
+          const dates = parsed
+            .map(d => new Date(d.date))
+            .filter(d => !isNaN(d.getTime()))
+            .sort((a, b) => a.getTime() - b.getTime());
+          
+          if (dates.length > 0) {
+            const maxDate = dates[dates.length - 1];
+            const from = new Date(maxDate);
+            from.setDate(maxDate.getDate() - 29); // Last 30 days
+            from.setHours(0, 0, 0, 0);
+            
+            const to = new Date(maxDate);
+            to.setHours(23, 59, 59, 999);
+            
+            setDateRange({ from, to });
+          }
+        }
+        
         setError(null);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Unknown error');
@@ -58,6 +74,7 @@ export function useCampaignData() {
   }, []);
 
   const filteredData = useMemo(() => {
+    if (!dateRange) return [];
     return filterByDateRange(rawData, dateRange.from, dateRange.to);
   }, [rawData, dateRange]);
 
@@ -78,8 +95,9 @@ export function useCampaignData() {
   }, [filteredData]);
 
   const campaignTrends: CampaignTrend[] = useMemo(() => {
+    if (!dateRange) return [];
     return getCampaignTrends(filteredData, dateRange.to);
-  }, [filteredData, dateRange.to]);
+  }, [filteredData, dateRange]);
 
   const availableDateRange = useMemo(() => {
     if (rawData.length === 0) return null;
