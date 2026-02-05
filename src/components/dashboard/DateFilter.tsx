@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { CalendarIcon } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, startOfDay, endOfDay, subDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { DateRange as DayPickerDateRange } from 'react-day-picker';
 import { Button } from '@/components/ui/button';
@@ -30,13 +30,16 @@ export function DateFilter({ dateRange, onDateRangeChange, availableDateRange }:
   ];
 
   const handlePreset = (days: number) => {
-    // Use the max available date as reference instead of today
-    const to = availableDateRange?.max ? new Date(availableDateRange.max) : new Date();
-    to.setHours(23, 59, 59, 999);
+    // 1. Define a data de referência (max disponível ou hoje)
+    // Se a data vier como string do backend, o Date() pode interpretar como UTC.
+    // O startOfDay/endOfDay ajudam a normalizar para o fuso local.
+    const referenceDate = availableDateRange?.max ? new Date(availableDateRange.max) : new Date();
     
-    const from = new Date(to);
-    from.setDate(to.getDate() - (days - 1)); // -1 because we want to include "to" day
-    from.setHours(0, 0, 0, 0);
+    // 2. Define o fim do período como o último milissegundo do dia de referência
+    const to = endOfDay(referenceDate);
+    
+    // 3. Define o início voltando X dias e garantindo que comece às 00:00:00
+    const from = startOfDay(subDays(to, days - 1));
     
     const newRange = { from, to };
     setSelectedRange(newRange);
@@ -46,7 +49,11 @@ export function DateFilter({ dateRange, onDateRangeChange, availableDateRange }:
   const handleSelect = (range: DayPickerDateRange | undefined) => {
     setSelectedRange(range);
     if (range?.from && range?.to) {
-      onDateRangeChange({ from: range.from, to: range.to });
+      // Garante que a seleção manual também respeite os limites do dia
+      onDateRangeChange({ 
+        from: startOfDay(range.from), 
+        to: endOfDay(range.to) 
+      });
       setIsOpen(false);
     }
   };
@@ -94,11 +101,12 @@ export function DateFilter({ dateRange, onDateRangeChange, availableDateRange }:
             numberOfMonths={2}
             disabled={(date) => {
               if (!availableDateRange) return false;
-              return date < availableDateRange.min || date > availableDateRange.max;
+              // Normaliza para comparação apenas de data, evitando bugs de horas
+              return date < startOfDay(availableDateRange.min) || date > endOfDay(availableDateRange.max);
             }}
             locale={ptBR}
             className="pointer-events-auto"
-          />
+          )
         </PopoverContent>
       </Popover>
     </div>
