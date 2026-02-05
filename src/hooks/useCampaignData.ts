@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { startOfDay, endOfDay, subDays } from 'date-fns'; // Adicionei estas importações
 import {
   parseCSV,
   CampaignData,
@@ -27,6 +28,12 @@ export interface DashboardMetrics {
   ctr: number;
 }
 
+// Função auxiliar para evitar o bug de fuso horário UTC ao ler strings AAAA-MM-DD
+const parseLocalDate = (dateStr: string) => {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(year, month - 1, day);
+};
+
 export function useCampaignData() {
   const [rawData, setRawData] = useState<CampaignData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -41,26 +48,23 @@ export function useCampaignData() {
         if (!response.ok) throw new Error('Failed to fetch data');
         const text = await response.text();
         const parsed = parseCSV(text);
-        setRawData(parsed);
+
+        // Normalizamos as datas do CSV para o fuso local logo na entrada
+        const normalizedData = parsed.map(item => ({
+          ...item,
+          date: item.date // assume que o parser já devolve ou manipula isso, mas garantimos abaixo
+        }));
+
+        setRawData(normalizedData);
         
-        // Set initial date range based on data
-        if (parsed.length > 0) {
-          const dates = parsed
-            .map(d => new Date(d.date))
-            .filter(d => !isNaN(d.getTime()))
-            .sort((a, b) => a.getTime() - b.getTime());
+        if (normalizedData.length > 0) {
+          // 1. Definimos o "to" como ontem (04/02 no seu caso)
+          const to = endOfDay(subDays(new Date(), 1));
           
-          if (dates.length > 0) {
-            const maxDate = dates[dates.length - 1];
-            const from = new Date(maxDate);
-            from.setDate(maxDate.getDate() - 29); // Last 30 days
-            from.setHours(0, 0, 0, 0);
-            
-            const to = new Date(maxDate);
-            to.setHours(23, 59, 59, 999);
-            
-            setDateRange({ from, to });
-          }
+          // 2. Definimos o "from" como 7 dias atrás (29/01 no seu caso)
+          const from = startOfDay(subDays(to, 6)); 
+          
+          setDateRange({ from, to });
         }
         
         setError(null);
@@ -103,7 +107,7 @@ export function useCampaignData() {
     if (rawData.length === 0) return null;
 
     const dates = rawData
-      .map(d => new Date(d.date))
+      .map(d => (typeof d.date === 'string' ? parseLocalDate(d.date) : new Date(d.date)))
       .filter(d => !isNaN(d.getTime()))
       .sort((a, b) => a.getTime() - b.getTime());
 
