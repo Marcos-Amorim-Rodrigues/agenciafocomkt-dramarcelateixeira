@@ -30,15 +30,12 @@ export function DateFilter({ dateRange, onDateRangeChange, availableDateRange }:
   ];
 
   const handlePreset = (days: number) => {
-    // 1. Define a data de referência (max disponível ou hoje)
-    // Se a data vier como string do backend, o Date() pode interpretar como UTC.
-    // O startOfDay/endOfDay ajudam a normalizar para o fuso local.
-    const referenceDate = availableDateRange?.max ? new Date(availableDateRange.max) : new Date();
+    // Define "ontem" como a data final (to)
+    const ontem = subDays(new Date(), 1);
+    const to = endOfDay(ontem);
     
-    // 2. Define o fim do período como o último milissegundo do dia de referência
-    const to = endOfDay(referenceDate);
-    
-    // 3. Define o início voltando X dias e garantindo que comece às 00:00:00
+    // Calcula a data inicial (from) baseada em ontem
+    // Ex: se ontem é 04, 7 dias atrás incluindo ontem é dia 29
     const from = startOfDay(subDays(to, days - 1));
     
     const newRange = { from, to };
@@ -49,7 +46,6 @@ export function DateFilter({ dateRange, onDateRangeChange, availableDateRange }:
   const handleSelect = (range: DayPickerDateRange | undefined) => {
     setSelectedRange(range);
     if (range?.from && range?.to) {
-      // Garante que a seleção manual também respeite os limites do dia
       onDateRangeChange({ 
         from: startOfDay(range.from), 
         to: endOfDay(range.to) 
@@ -100,13 +96,16 @@ export function DateFilter({ dateRange, onDateRangeChange, availableDateRange }:
             onSelect={handleSelect}
             numberOfMonths={2}
             disabled={(date) => {
-              if (!availableDateRange) return false;
-              // Normaliza para comparação apenas de data, evitando bugs de horas
-              return date < startOfDay(availableDateRange.min) || date > endOfDay(availableDateRange.max);
+              // Bloqueia datas futuras a partir de hoje (permitindo no máximo até ontem)
+              const hoje = startOfDay(new Date());
+              if (availableDateRange) {
+                return date < startOfDay(availableDateRange.min) || date >= hoje;
+              }
+              return date >= hoje;
             }}
             locale={ptBR}
             className="pointer-events-auto"
-          )
+          />
         </PopoverContent>
       </Popover>
     </div>
