@@ -30,9 +30,14 @@ export function DateFilter({ dateRange, onDateRangeChange, availableDateRange }:
   ];
 
   const handlePreset = (days: number) => {
-    const to = new Date();
-    const from = new Date();
-    from.setDate(to.getDate() - days);
+    // Use the max available date as reference instead of today
+    const to = availableDateRange?.max ? new Date(availableDateRange.max) : new Date();
+    to.setHours(23, 59, 59, 999);
+    
+    const from = new Date(to);
+    from.setDate(to.getDate() - (days - 1)); // -1 because we want to include "to" day
+    from.setHours(0, 0, 0, 0);
+    
     const newRange = { from, to };
     setSelectedRange(newRange);
     onDateRangeChange(newRange);
