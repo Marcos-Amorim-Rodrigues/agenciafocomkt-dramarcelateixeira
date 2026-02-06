@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { startOfDay, endOfDay, subDays } from 'date-fns'; // Adicionei estas importações
+import { startOfDay, endOfDay, subDays } from 'date-fns';
 import {
   parseCSV,
   CampaignData,
@@ -28,7 +28,7 @@ export interface DashboardMetrics {
   ctr: number;
 }
 
-// Função auxiliar para evitar o bug de fuso horário UTC ao ler strings AAAA-MM-DD
+// Função para garantir que a data da string AAAA-MM-DD seja lida no fuso local
 const parseLocalDate = (dateStr: string) => {
   const [year, month, day] = dateStr.split('-').map(Number);
   return new Date(year, month - 1, day);
@@ -49,20 +49,15 @@ export function useCampaignData() {
         const text = await response.text();
         const parsed = parseCSV(text);
 
-        // Normalizamos as datas do CSV para o fuso local logo na entrada
-        const normalizedData = parsed.map(item => ({
-          ...item,
-          date: item.date // assume que o parser já devolve ou manipula isso, mas garantimos abaixo
-        }));
-
-        setRawData(normalizedData);
+        setRawData(parsed);
         
-        if (normalizedData.length > 0) {
-          // 1. Definimos o "to" como ontem (04/02 no seu caso)
+        // Ajuste do Range Inicial: Últimos 7 dias (D-7 até D-1)
+        if (parsed.length > 0) {
+          // Ontem (04/02)
           const to = endOfDay(subDays(new Date(), 1));
           
-          // 2. Definimos o "from" como 7 dias atrás (29/01 no seu caso)
-          const from = startOfDay(subDays(to, 6)); 
+          // Para pegar 7 dias exatos terminando ontem (Ex: 29/01 a 04/02), subtraímos 6 dias.
+          const from = startOfDay(subDays(to, 6));
           
           setDateRange({ from, to });
         }
@@ -79,6 +74,7 @@ export function useCampaignData() {
 
   const filteredData = useMemo(() => {
     if (!dateRange) return [];
+    // Certifique-se que o filterByDateRange no seu lib/csvParser usa .getTime() para comparar
     return filterByDateRange(rawData, dateRange.from, dateRange.to);
   }, [rawData, dateRange]);
 
@@ -106,6 +102,7 @@ export function useCampaignData() {
   const availableDateRange = useMemo(() => {
     if (rawData.length === 0) return null;
 
+    // Converte todas as datas para garantir comparação correta de min/max
     const dates = rawData
       .map(d => (typeof d.date === 'string' ? parseLocalDate(d.date) : new Date(d.date)))
       .filter(d => !isNaN(d.getTime()))
