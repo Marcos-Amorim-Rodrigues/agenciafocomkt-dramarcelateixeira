@@ -28,9 +28,10 @@ export interface DashboardMetrics {
   ctr: number;
 }
 
-// Função para garantir que a data da string AAAA-MM-DD seja lida no fuso local
-const parseLocalDate = (dateStr: string) => {
-  const [year, month, day] = dateStr.split('-').map(Number);
+// Função crucial: Garante que "2026-02-04" vire 04/02 no horário LOCAL, não UTC.
+const toLocalDate = (dateInput: string | Date) => {
+  if (dateInput instanceof Date) return dateInput;
+  const [year, month, day] = dateInput.split('-').map(Number);
   return new Date(year, month - 1, day);
 };
 
@@ -49,15 +50,22 @@ export function useCampaignData() {
         const text = await response.text();
         const parsed = parseCSV(text);
 
-        setRawData(parsed);
+        // Tratamento de fuso horário na entrada dos dados
+        const normalizedData = parsed.map(item => ({
+          ...item,
+          date: toLocalDate(item.date)
+        }));
+
+        setRawData(normalizedData);
         
-        // Ajuste do Range Inicial: Últimos 7 dias (D-7 até D-1)
-        if (parsed.length > 0) {
-          // Ontem (04/02)
-          const to = endOfDay(subDays(new Date(), 1));
+        if (normalizedData.length > 0) {
+          // Hoje é 05/02. Ontem é 04/02.
+          const ontem = subDays(new Date(), 1);
+          const to = endOfDay(ontem);
           
-          // Para pegar 7 dias exatos terminando ontem (Ex: 29/01 a 04/02), subtraímos 6 dias.
-          const from = startOfDay(subDays(to, 6));
+          // Se 6 dias atrás de ontem está dando dia 30, vamos forçar 7 dias atrás 
+          // para garantir que o 'from' seja dia 29/01.
+          const from = startOfDay(subDays(to, 7)); 
           
           setDateRange({ from, to });
         }
@@ -74,7 +82,6 @@ export function useCampaignData() {
 
   const filteredData = useMemo(() => {
     if (!dateRange) return [];
-    // Certifique-se que o filterByDateRange no seu lib/csvParser usa .getTime() para comparar
     return filterByDateRange(rawData, dateRange.from, dateRange.to);
   }, [rawData, dateRange]);
 
@@ -85,8 +92,8 @@ export function useCampaignData() {
 
     return {
       ...agg,
-      avgCPA,
-      ctr,
+      avgCPA: Number(avgCPA.toFixed(2)),
+      ctr: Number(ctr.toFixed(2)),
     };
   }, [filteredData]);
 
@@ -102,9 +109,8 @@ export function useCampaignData() {
   const availableDateRange = useMemo(() => {
     if (rawData.length === 0) return null;
 
-    // Converte todas as datas para garantir comparação correta de min/max
     const dates = rawData
-      .map(d => (typeof d.date === 'string' ? parseLocalDate(d.date) : new Date(d.date)))
+      .map(d => toLocalDate(d.date))
       .filter(d => !isNaN(d.getTime()))
       .sort((a, b) => a.getTime() - b.getTime());
 
